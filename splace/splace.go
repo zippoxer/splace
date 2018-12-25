@@ -1,6 +1,7 @@
 package splace
 
 import (
+	"context"
 	"database/sql"
 )
 
@@ -18,4 +19,10 @@ type Splace struct {
 
 func New(db *sql.DB) *Splace {
 	return &Splace{db: db}
+}
+
+func (s *Splace) Replace(ctx context.Context, opt ReplaceOptions) *Replacer {
+	r := &Replacer{ctx: ctx, db: s.db, opt: opt}
+	r.start()
+	return r
 }

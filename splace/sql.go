@@ -3,8 +3,6 @@ package splace
 import (
 	"fmt"
 	"strings"
-
-	"github.com/keegancsmith/sqlf"
 )
 
 type queryOptions struct {
@@ -24,10 +22,10 @@ type queryBuilder struct {
 
 func (b *queryBuilder) build(opt queryOptions) string {
 	if opt.update {
-		fmt.Fprintf(&b.b, "SELECT * FROM %s ", opt.table)
-	} else {
-		fmt.Fprintf(&b.b, "UPDATE %s ", opt.table)
+		fmt.Fprintf(&b.b, "UPDATE `%s` ", opt.table)
 		b.set(opt.columns, opt.search, opt.replace, opt.mode)
+	} else {
+		fmt.Fprintf(&b.b, "SELECT * FROM `%s` ", opt.table)
 	}
 
 	b.where(opt.columns, opt.search, opt.mode)
@@ -36,7 +34,9 @@ func (b *queryBuilder) build(opt queryOptions) string {
 		fmt.Fprintf(&b.b, "LIMIT %d", opt.limit)
 	}
 
-	return b.b.String()
+	s := b.b.String()
+	b.b.Reset()
+	return s
 }
 
 func (b *queryBuilder) where(columns []string, search string, mode Mode) {
@@ -53,10 +53,10 @@ func (b *queryBuilder) where(columns []string, search string, mode Mode) {
 			b.b.WriteString(" REGEXP ")
 		}
 
-		b.b.WriteString(sqlf.Sprintf("'%s'", search).Query(sqlf.PostgresBindVar))
+		b.b.WriteString(querySprintf("'%s' ", search))
 
 		if i < len(columns)-1 {
-			b.b.WriteString(" AND ")
+			b.b.WriteString("OR ")
 		}
 	}
 }
@@ -66,19 +66,65 @@ func (b *queryBuilder) set(columns []string, search, replace string, mode Mode) 
 	for i, col := range columns {
 		fmt.Fprintf(&b.b, "`%s` = ", col)
 
-		var q *sqlf.Query
 		switch mode {
 		case Equals:
-			q = sqlf.Sprintf("'%s'", replace)
+			b.b.WriteString(querySprintf("'%s' ", replace))
 		case Like:
-			q = sqlf.Sprintf("REPLACE(`%s`, '%s', '%s')", col, search, replace)
+			b.b.WriteString(querySprintf("REPLACE(`%s`, '%s', '%s') ", col, search, replace))
 		case Regexp:
-			q = sqlf.Sprintf("REGEXP_REPLACE(`%s`, '%s', '%s')", col, search, replace)
+			b.b.WriteString(querySprintf("REGEXP_REPLACE(`%s`, '%s', '%s') ", col, search, replace))
 		}
-		b.b.WriteString(q.Query(sqlf.PostgresBindVar))
 
 		if i < len(columns)-1 {
-			b.b.WriteString(" AND ")
+			b.b.WriteString(", ")
 		}
 	}
+}
+
+func querySprintf(format string, args ...interface{}) string {
+	for i := range args {
+		args[i] = queryEscape(fmt.Sprint(args[i]))
+	}
+	return fmt.Sprintf(format, args...)
+}
+
+func queryEscape(sql string) string {
+	dest := make([]byte, 0, 2*len(sql))
+	var escape byte
+	for i := 0; i < len(sql); i++ {
+		c := sql[i]
+
+		escape = 0
+
+		switch c {
+		case 0: /* Must be escaped for 'mysql' */
+			escape = '0'
+			break
+		case '\n': /* Must be escaped for logs */
+			escape = 'n'
+			break
+		case '\r':
+			escape = 'r'
+			break
+		case '\\':
+			escape = '\\'
+			break
+		case '\'':
+			escape = '\''
+			break
+		case '"': /* Better safe than sorry */
+			escape = '"'
+			break
+		case '\032': /* This gives problems on Win32 */
+			escape = 'Z'
+		}
+
+		if escape != 0 {
+			dest = append(dest, '\\', escape)
+		} else {
+			dest = append(dest, c)
+		}
+	}
+
+	return string(dest)
 }
