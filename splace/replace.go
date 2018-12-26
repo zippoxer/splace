@@ -2,7 +2,7 @@ package splace
 
 import (
 	"context"
-	"database/sql"
+	"splace/splace/querier"
 	"time"
 )
 
@@ -36,7 +36,7 @@ type ReplaceResult struct {
 }
 
 type Replacer struct {
-	db  *sql.DB
+	db  querier.Querier
 	opt ReplaceOptions
 	ctx context.Context
 
@@ -44,7 +44,7 @@ type Replacer struct {
 	err     chan error
 }
 
-func newReplacer(db *sql.DB, opt ReplaceOptions) *Replacer {
+func newReplacer(db querier.Querier, opt ReplaceOptions) *Replacer {
 	return &Replacer{
 		db:  db,
 		opt: opt,
@@ -87,7 +87,7 @@ func (r *Replacer) replace() error {
 		}
 
 		for {
-			result, err := r.db.ExecContext(r.ctx, query)
+			result, err := r.db.Exec(r.ctx, query)
 			if err != nil {
 				return err
 			}
