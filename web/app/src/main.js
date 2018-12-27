@@ -7,11 +7,14 @@ import router from './router'
 import Vuikit from 'vuikit'
 import VuikitIcons from '@vuikit/icons'
 import '@vuikit/theme'
+import Splace from './splace'
 
 Vue.config.productionTip = false
 
 Vue.use(Vuikit)
 Vue.use(VuikitIcons)
+
+Vue.prototype.$splace = new Splace()
 
 /* eslint-disable no-new */
 new Vue({

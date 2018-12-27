@@ -1,14 +1,8 @@
 package main
 
 import (
-	"context"
-	"database/sql"
-	"encoding/json"
 	"flag"
 	"log"
-	"os"
-	"splace/splace"
-	"splace/splace/querier"
 	"splace/web"
 
 	_ "github.com/go-sql-driver/mysql"
@@ -20,17 +14,6 @@ var dev = flag.Bool("dev", false, "")
 func main() {
 	flag.Parse()
 
-	db, err := sql.Open("mysql", "root:@/quizard_web_dev")
-	if err != nil {
-		log.Fatal(err)
-	}
-	s := splace.New(querier.NewDirect("quizard_web_dev", querier.MySQL, db))
-	tables, err := s.Tables(context.Background())
-	e := json.NewEncoder(os.Stdout)
-	e.SetIndent("", "\t")
-	e.Encode(tables)
-	log.Println(err)
-
 	app := web.New(web.Options{
 		Path:  ".",
 		Debug: *dev,
@@ -39,6 +22,7 @@ func main() {
 	go func() {
 		log.Fatal(app.Run())
 	}()
+	// select {}
 
 	wv := webview.New(webview.Settings{
 		Title:     "splace",

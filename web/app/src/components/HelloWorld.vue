@@ -1,15 +1,37 @@
 <template>
   <div>
-    <vk-button>asd</vk-button>
+    <vk-button @click="connect">asd</vk-button>
+    <dl class="uk-description-list">
+        <template v-for="(columns, table) in tables">
+          <dt :key="table">{{table}}</dt>
+          <dd :key="table">{{columns.join(", ")}}</dd>
+        </template>
+    </dl>
   </div>
 </template>
 
 <script>
 export default {
   name: 'HelloWorld',
+  created () {
+  },
   data () {
     return {
-      msg: 'Welcome to Your Vue.js App'
+      tables: null
+    }
+  },
+  methods: {
+    connect () {
+      console.log('connecting!')
+      this.$splace.connect({
+        Driver: 'direct',
+        Engine: 0,
+        Host: 'localhost',
+        Database: 'quizard_web_dev',
+        User: 'root'
+      }).then(resp => {
+        this.tables = resp.data.Tables
+      })
     }
   }
 }

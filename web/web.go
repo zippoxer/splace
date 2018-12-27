@@ -50,6 +50,8 @@ func (s *Server) Run() error {
 	}
 	e.Renderer = t
 
+	e.HTTPErrorHandler = s.httpErrorHandler
+
 	e.Static("/static", filepath.Join(s.opt.Path, "web/app/dist/static"))
 	e.GET("/", s.index)
 	e.POST("/connect", s.connect)
@@ -59,6 +61,22 @@ func (s *Server) Run() error {
 
 func (s *Server) debug() bool {
 	return s.opt.Debug
+}
+
+func (s *Server) httpErrorHandler(err error, c echo.Context) {
+	code := http.StatusInternalServerError
+	if he, ok := err.(*echo.HTTPError); ok {
+		code = he.Code
+	}
+	var resp = struct {
+		Error string
+	}{
+		err.Error(),
+	}
+	if err := c.JSON(code, resp); err != nil {
+		c.Logger().Error(err)
+	}
+	c.Logger().Error(err)
 }
 
 func (s *Server) index(c echo.Context) error {
@@ -72,7 +90,7 @@ func (s *Server) index(c echo.Context) error {
 	})
 }
 
-type connectRequest struct {
+type connectReq struct {
 	Driver string
 	Engine int
 
@@ -85,20 +103,25 @@ type connectRequest struct {
 	Secret string
 }
 
+type connectResp struct {
+	Tables map[string][]string
+}
+
 func (s *Server) connect(c echo.Context) error {
-	var req connectRequest
+	var req connectReq
 	if err := c.Bind(&req); err != nil {
 		return err
 	}
 
 	switch req.Driver {
+
 	case "direct":
 		u := &url.URL{
-			Host: req.Host,
+			Host: fmt.Sprintf("tcp(%s)", req.Host),
 			Path: req.Database,
 			User: url.UserPassword(req.User, req.Pwd),
 		}
-		db, err := sql.Open("mysql", u.String())
+		db, err := sql.Open("mysql", u.String()[2:])
 		if err != nil {
 			return err
 		}
@@ -117,7 +140,9 @@ func (s *Server) connect(c echo.Context) error {
 		return err
 	}
 
-	return c.JSON(http.StatusOK, tables)
+	return c.JSON(http.StatusOK, connectResp{
+		Tables: tables,
+	})
 }
 
 type Template struct {
