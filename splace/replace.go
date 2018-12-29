@@ -36,32 +36,28 @@ type ReplaceResult struct {
 }
 
 type Replacer struct {
+	ctx context.Context
 	db  querier.Querier
 	opt ReplaceOptions
-	ctx context.Context
 
 	results chan ReplaceResult
-	err     chan error
+	done    chan error
 }
 
-func newReplacer(db querier.Querier, opt ReplaceOptions) *Replacer {
+func newReplacer(ctx context.Context, db querier.Querier, opt ReplaceOptions) *Replacer {
 	return &Replacer{
-		db:  db,
-		opt: opt,
+		ctx:     ctx,
+		db:      db,
+		opt:     opt,
+		results: make(chan ReplaceResult, 128),
+		done:    make(chan error),
 	}
 }
 
 func (r *Replacer) start() {
-	r.results = make(chan ReplaceResult)
-	r.err = make(chan error)
-
-	err := r.replace()
-	if err != nil {
-		r.err <- err
-	}
-
-	close(r.results)
-	close(r.err)
+	defer close(r.results)
+	defer close(r.done)
+	r.done <- r.replace()
 }
 
 func (r *Replacer) replace() error {
@@ -78,6 +74,7 @@ func (r *Replacer) replace() error {
 		})
 
 		iterations := make(chan int)
+		defer close(iterations)
 
 		r.results <- ReplaceResult{
 			Table:        table,
@@ -96,6 +93,7 @@ func (r *Replacer) replace() error {
 				return err
 			}
 			if rowsAffected == 0 {
+				close(iterations)
 				break
 			}
 			iterations <- int(rowsAffected)
@@ -108,6 +106,6 @@ func (r *Replacer) Results() <-chan ReplaceResult {
 	return r.results
 }
 
-func (r *Replacer) Err() <-chan error {
-	return r.err
+func (r *Replacer) Done() <-chan error {
+	return r.done
 }

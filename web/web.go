@@ -2,6 +2,7 @@ package web
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
@@ -11,18 +12,23 @@ import (
 	"path/filepath"
 	"splace/splace"
 	"splace/splace/querier"
+	"splace/web/sse"
+	"time"
 
 	"github.com/labstack/echo"
+	"github.com/labstack/echo/middleware"
 )
 
 type Options struct {
 	Path  string
 	Debug bool
-	Port  int
+	Addr  string
 }
 
 type Server struct {
-	opt    Options
+	opt Options
+
+	addr   net.Addr
 	db     querier.Querier
 	splace *splace.Splace
 }
@@ -31,15 +37,26 @@ func New(opt Options) *Server {
 	return &Server{opt: opt}
 }
 
+func (s *Server) Addr() net.Addr {
+	return s.addr
+}
+
 func (s *Server) Run() error {
-	ln, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", s.opt.Port))
+	ln, err := net.Listen("tcp", s.opt.Addr)
 	if err != nil {
 		return err
 	}
+	s.addr = ln.Addr()
 	defer ln.Close()
 
 	e := echo.New()
 	e.Debug = s.debug()
+	e.Use(middleware.Logger())
+	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins: []string{"http://localhost:8080", "http://" + s.addr.String()},
+		AllowMethods: []string{http.MethodGet, http.MethodPut, http.MethodPost, http.MethodDelete},
+		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept},
+	}))
 
 	templateFile := "web/app/dist/index.html"
 	if s.debug() {
@@ -55,6 +72,7 @@ func (s *Server) Run() error {
 	e.Static("/static", filepath.Join(s.opt.Path, "web/app/dist/static"))
 	e.GET("/", s.index)
 	e.POST("/connect", s.connect)
+	e.GET("/search", s.search)
 
 	return http.Serve(ln, e)
 }
@@ -86,6 +104,7 @@ func (s *Server) index(c echo.Context) error {
 	}
 	return c.Render(http.StatusOK, "index.html", map[string]interface{}{
 		"Dev":       s.debug(),
+		"APIURL":    s.addr.String(),
 		"BundleURL": bundleURL,
 	})
 }
@@ -114,7 +133,6 @@ func (s *Server) connect(c echo.Context) error {
 	}
 
 	switch req.Driver {
-
 	case "direct":
 		u := &url.URL{
 			Host: fmt.Sprintf("tcp(%s)", req.Host),
@@ -143,6 +161,69 @@ func (s *Server) connect(c echo.Context) error {
 	return c.JSON(http.StatusOK, connectResp{
 		Tables: tables,
 	})
+}
+
+func (s *Server) search(c echo.Context) error {
+	var options splace.SearchOptions
+
+	if err := json.Unmarshal([]byte(c.QueryParam("options")), &options); err != nil {
+		return err
+	}
+
+	searcher := s.splace.Search(c.Request().Context(), options)
+	stream := sse.Open(c.Response().Writer)
+
+	ticker := time.NewTicker(time.Millisecond * 150)
+	defer ticker.Stop()
+	buff := make([][]string, 0, 1024)
+	sendRows := func() {
+		if len(buff) > 0 {
+			stream.Send("rows", buff)
+			buff = make([][]string, 0, 1024)
+		}
+	}
+	for {
+		select {
+		case result := <-searcher.Results():
+			stream.Send("table", struct {
+				Table string
+				SQL   string
+				Start time.Time
+			}{
+				Table: result.Table,
+				SQL:   result.SQL,
+				Start: result.Start,
+			})
+
+			for row := range result.Rows {
+				buff = append(buff, row)
+
+				// If rows buffer is full or the update interval
+				// has passed, send the rows.
+				if len(buff) == cap(buff) {
+					sendRows()
+				} else {
+					select {
+					case <-ticker.C:
+						sendRows()
+					default:
+					}
+				}
+			}
+			sendRows()
+		case err := <-searcher.Done():
+			stream.Send("done", struct {
+				Error error
+			}{
+				err,
+			})
+			return stream.Wait()
+		}
+	}
+}
+
+func (s *Server) replace(c echo.Context) error {
+	return nil
 }
 
 type Template struct {

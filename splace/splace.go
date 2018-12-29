@@ -21,9 +21,15 @@ func New(db querier.Querier) *Splace {
 	return &Splace{db: db}
 }
 
+func (s *Splace) Search(ctx context.Context, opt SearchOptions) *Searcher {
+	sr := newSearcher(ctx, s.db, opt)
+	go sr.start()
+	return sr
+}
+
 func (s *Splace) Replace(ctx context.Context, opt ReplaceOptions) *Replacer {
-	r := &Replacer{ctx: ctx, db: s.db, opt: opt}
-	r.start()
+	r := newReplacer(ctx, s.db, opt)
+	go r.start()
 	return r
 }
 
@@ -34,13 +40,13 @@ func (s *Splace) Tables(ctx context.Context) (map[string][]string, error) {
 	}
 	defer rows.Close()
 	tables := make(map[string][]string)
-	var tableName, columnName string
 	for rows.Next() {
-		if err := rows.Scan(&tableName, &columnName); err != nil {
+		row, err := rows.ScanStrings()
+		if err != nil {
 			return nil, err
 		}
-		cols, _ := tables[tableName]
-		tables[tableName] = append(cols, columnName)
+		cols, _ := tables[row[0]]
+		tables[row[0]] = append(cols, row[1])
 	}
 	return tables, rows.Err()
 }

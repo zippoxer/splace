@@ -28,7 +28,7 @@ type Result interface {
 type Rows interface {
 	Columns() ([]string, error)
 	Next() bool
-	Scan(dest ...interface{}) error
+	ScanStrings() ([]string, error)
 	Err() error
 	Close() error
 }

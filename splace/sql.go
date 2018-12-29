@@ -10,6 +10,7 @@ type queryOptions struct {
 	columns []string
 	mode    Mode
 	search  string
+	offset  int
 	limit   int
 
 	update  bool
@@ -31,7 +32,11 @@ func (b *queryBuilder) build(opt queryOptions) string {
 	b.where(opt.columns, opt.search, opt.mode)
 
 	if opt.limit > 0 {
-		fmt.Fprintf(&b.b, "LIMIT %d", opt.limit)
+		if opt.offset > 0 {
+			fmt.Fprintf(&b.b, "LIMIT %d, %d", opt.offset, opt.limit)
+		} else {
+			fmt.Fprintf(&b.b, "LIMIT %d", opt.limit)
+		}
 	}
 
 	s := b.b.String()
@@ -48,7 +53,7 @@ func (b *queryBuilder) where(columns []string, search string, mode Mode) {
 		case Equals:
 			b.b.WriteString(" = ")
 		case Like:
-			b.b.WriteString(" LIKE ")
+			b.b.WriteString(" LIKE BINARY ")
 		case Regexp:
 			b.b.WriteString(" REGEXP ")
 		}

@@ -1,4 +1,4 @@
-'use strict';
+'use strict'
 const utils = require('./utils')
 const webpack = require('webpack')
 const config = require('../config')
@@ -34,7 +34,7 @@ const devWebpackConfig = merge(baseWebpackConfig, {
         }
       ]
     },
-    hot: false,
+    hot: true,
     contentBase: false, // since we use CopyWebpackPlugin.
     compress: true,
     host: HOST || config.dev.host,
