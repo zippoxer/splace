@@ -8,6 +8,7 @@
         </div>
         <vk-button
           type="link"
+          href="/dump"
           tabindex="-1">Download backup</vk-button>
       </div>
       <vk-grid
