@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/ioutil"
 	"net/http"
 )
@@ -60,6 +61,10 @@ func (p *PHP) Exec(ctx context.Context, query string, args ...interface{}) (Resu
 
 func (p *PHP) Query(ctx context.Context, query string, args ...interface{}) (Rows, error) {
 	return nil, nil
+}
+
+func (p *PHP) Dump(ctx context.Context, w io.Writer) error {
+	return nil
 }
 
 func (p *PHP) Engine() Engine {

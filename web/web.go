@@ -1,6 +1,7 @@
 package web
 
 import (
+	"compress/gzip"
 	"database/sql"
 	"encoding/json"
 	"fmt"
@@ -74,6 +75,7 @@ func (s *Server) Run() error {
 	e.GET("/", s.index)
 	e.POST("/connect", s.connect)
 	e.GET("/search", s.search)
+	e.GET("/dump", s.dump)
 
 	return http.Serve(ln, e)
 }
@@ -140,11 +142,15 @@ func (s *Server) connect(c echo.Context) error {
 			Path: req.Database,
 			User: url.UserPassword(req.User, req.Pwd),
 		}
-		db, err := sql.Open("mysql", u.String()[2:])
+		dsn := u.String()[2:]
+		db, err := sql.Open("mysql", dsn)
 		if err != nil {
 			return err
 		}
-		s.db = querier.NewDirect(req.Database, querier.Engine(req.Engine), db)
+		s.db, err = querier.NewDirect(querier.Engine(req.Engine), dsn, db)
+		if err != nil {
+			return err
+		}
 	case "php":
 		qr, err := querier.NewPHP(req.URL, req.Secret)
 		if err != nil {
@@ -162,6 +168,24 @@ func (s *Server) connect(c echo.Context) error {
 	return c.JSON(http.StatusOK, connectResp{
 		Tables: tables,
 	})
+}
+
+func (s *Server) dump(c echo.Context) error {
+	filename := fmt.Sprintf("%s--%s.sql.gz",
+		s.db.Database(),
+		time.Now().Format("2006-02-01--15-04-05"))
+	c.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	c.Response().Header().Set("Content-Type", "application/sql")
+
+	w := gzip.NewWriter(c.Response().Writer)
+	defer w.Close()
+
+	err := s.db.Dump(c.Request().Context(), w)
+	if err != nil {
+		return err
+	}
+
+	return w.Flush()
 }
 
 func (s *Server) search(c echo.Context) error {

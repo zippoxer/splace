@@ -4,20 +4,25 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 )
 
 type Direct struct {
 	db     *sql.DB
-	dbName string
 	engine Engine
+	dsn    dsn
 }
 
-func NewDirect(dbName string, engine Engine, db *sql.DB) *Direct {
+func NewDirect(engine Engine, dataSourceName string, db *sql.DB) (*Direct, error) {
+	dsn, err := parseDSN(engine, dataSourceName)
+	if err != nil {
+		return nil, err
+	}
 	return &Direct{
 		db:     db,
-		dbName: dbName,
+		dsn:    dsn,
 		engine: engine,
-	}
+	}, nil
 }
 
 func (d *Direct) Exec(ctx context.Context, query string, args ...interface{}) (Result, error) {
@@ -29,12 +34,21 @@ func (d *Direct) Query(ctx context.Context, query string, args ...interface{}) (
 	return &directRows{Rows: rows}, err
 }
 
+func (d *Direct) Dump(ctx context.Context, w io.Writer) error {
+	switch d.engine {
+	case MySQL:
+		dsn := d.dsn.(mysqlDSN)
+		return mysqldump(ctx, dsn.config, w)
+	}
+	return fmt.Errorf("dumps for %s are not supported yet", d.engine)
+}
+
 func (d *Direct) Engine() Engine {
 	return d.engine
 }
 
 func (d *Direct) Database() string {
-	return d.dbName
+	return d.dsn.Database()
 }
 
 type directRows struct {

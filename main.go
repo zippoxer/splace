@@ -78,8 +78,10 @@ func main() {
 		log.Fatal(app.Run())
 	}()
 
-	if err := openBrowser("http://localhost:30993"); err != nil {
-		log.Println(err)
+	if !*dev {
+		if err := openBrowser("http://localhost:30993"); err != nil {
+			log.Println(err)
+		}
 	}
 
 	select {}
