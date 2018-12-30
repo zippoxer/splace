@@ -10,10 +10,11 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
-	"splace/splace"
-	"splace/splace/querier"
-	"splace/web/sse"
 	"time"
+
+	"github.com/zippoxer/splace/splace"
+	"github.com/zippoxer/splace/splace/querier"
+	"github.com/zippoxer/splace/web/sse"
 
 	"github.com/labstack/echo"
 	"github.com/labstack/echo/middleware"

@@ -80,7 +80,7 @@ export default {
       consts,
       operation: null,
       options: {
-        search: 'quizard',
+        search: '',
         replace: '',
         mode: 0,
 

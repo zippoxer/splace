@@ -2,8 +2,9 @@ package splace
 
 import (
 	"context"
-	"splace/splace/querier"
 	"time"
+
+	"github.com/zippoxer/splace/splace/querier"
 )
 
 type SearchOptions struct {
