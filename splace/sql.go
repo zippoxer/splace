@@ -47,18 +47,19 @@ func (b *queryBuilder) build(opt queryOptions) string {
 func (b *queryBuilder) where(columns []string, search string, mode Mode) {
 	b.b.WriteString("WHERE ")
 	for i, col := range columns {
-		fmt.Fprintf(&b.b, "`%s`", col)
+		fmt.Fprintf(&b.b, "`%s` ", col)
 
 		switch mode {
 		case Equals:
-			b.b.WriteString(" = ")
+			b.b.WriteString(querySprintf("= '%s' ", search))
+		case Contains:
+			escapedSearch := strings.Replace(search, `%`, `\%`, -1)
+			b.b.WriteString("LIKE BINARY '%" + querySprintf("%s", escapedSearch) + "%' ")
 		case Like:
-			b.b.WriteString(" LIKE BINARY ")
+			b.b.WriteString(querySprintf("LIKE BINARY '%s' ", search))
 		case Regexp:
-			b.b.WriteString(" REGEXP ")
+			b.b.WriteString(querySprintf("REGEXP '%s' ", search))
 		}
-
-		b.b.WriteString(querySprintf("'%s' ", search))
 
 		if i < len(columns)-1 {
 			b.b.WriteString("OR ")
@@ -74,8 +75,10 @@ func (b *queryBuilder) set(columns []string, search, replace string, mode Mode) 
 		switch mode {
 		case Equals:
 			b.b.WriteString(querySprintf("'%s' ", replace))
-		case Like:
+		case Contains:
 			b.b.WriteString(querySprintf("REPLACE(`%s`, '%s', '%s') ", col, search, replace))
+		case Like:
+			panic("queryBuilder.set: update queries don't support Like")
 		case Regexp:
 			b.b.WriteString(querySprintf("REGEXP_REPLACE(`%s`, '%s', '%s') ", col, search, replace))
 		}

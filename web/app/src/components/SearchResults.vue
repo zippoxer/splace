@@ -64,7 +64,7 @@
                 <tr>
                   <th
                     v-for="(column, i) in tables[result.table]"
-                    :key="i">{{ column }}</th>
+                    :key="i">{{ column.Column }}</th>
                 </tr>
               </thead>
               <tbody>

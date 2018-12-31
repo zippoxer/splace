@@ -13,15 +13,13 @@ type ReplaceOptions struct {
 	Mode    Mode
 
 	// Tables is a map of selected table names and column names.
-	Tables map[string][]string
+	Tables TableMap
 
 	// Limit sets the maximum amount of rows updated with each query.
 	// A lower limit would provide frequent progress updates,
 	// while with a higher limit the operation would complete faster.
 	// Set to 0 for no limit.
 	Limit int
-
-	Dry bool
 }
 
 type ReplaceResult struct {
@@ -64,43 +62,54 @@ func (r *Replacer) start() {
 func (r *Replacer) replace() error {
 	qb := &queryBuilder{}
 	for table, columns := range r.opt.Tables {
-		query := qb.build(queryOptions{
-			table:   table,
-			columns: columns,
-			mode:    r.opt.Mode,
-			search:  r.opt.Search,
-			limit:   r.opt.Limit,
-			update:  true,
-			replace: r.opt.Replace,
-		})
-
-		iterations := make(chan int)
-		defer close(iterations)
-
-		r.results <- ReplaceResult{
-			Table:        table,
-			SQL:          query,
-			AffectedRows: iterations,
-			Start:        time.Now(),
+		var cols []string
+		for _, col := range columns {
+			if isColumnTypeReplacable(col.Type) {
+				cols = append(cols, col.Column)
+			}
 		}
-
-		for {
-			result, err := r.db.Exec(r.ctx, query)
-			if err != nil {
-				return err
-			}
-			rowsAffected, err := result.RowsAffected()
-			if err != nil {
-				return err
-			}
-			if rowsAffected == 0 {
-				close(iterations)
-				break
-			}
-			iterations <- int(rowsAffected)
+		if err := r.replaceTable(qb, table, cols); err != nil {
+			return err
 		}
 	}
 	return nil
+}
+
+func (r *Replacer) replaceTable(qb *queryBuilder, table string, columns []string) error {
+	query := qb.build(queryOptions{
+		table:   table,
+		columns: columns,
+		mode:    r.opt.Mode,
+		search:  r.opt.Search,
+		limit:   r.opt.Limit,
+		update:  true,
+		replace: r.opt.Replace,
+	})
+
+	iterations := make(chan int)
+	defer close(iterations)
+
+	r.results <- ReplaceResult{
+		Table:        table,
+		SQL:          query,
+		AffectedRows: iterations,
+		Start:        time.Now(),
+	}
+
+	for {
+		result, err := r.db.Exec(r.ctx, query)
+		if err != nil {
+			return err
+		}
+		rowsAffected, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if rowsAffected == 0 {
+			return nil
+		}
+		iterations <- int(rowsAffected)
+	}
 }
 
 func (r *Replacer) Results() <-chan ReplaceResult {

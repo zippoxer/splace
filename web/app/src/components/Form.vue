@@ -51,7 +51,9 @@
             @click="search">Search</vk-button>
         </div>
         <div class="uk-width-1-2@s">
-          <vk-button class="uk-button-danger uk-width-1">Search & Replace</vk-button>
+          <vk-button
+            class="uk-button-danger uk-width-1"
+            @click="replace">Search & Replace</vk-button>
         </div>
       </vk-grid>
     </div>
@@ -80,14 +82,14 @@ export default {
       consts,
       operation: null,
       options: {
-        search: '',
-        replace: '',
-        mode: 0,
+        search: 'quizard',
+        replace: 'qquizzard',
+        mode: Object.keys(consts.SEARCH_MODES)[0],
 
         db: {
-          host: '',
-          database: '',
-          user: '',
+          host: 'localhost',
+          database: 'quizard_web_dev',
+          user: 'root',
           password: '',
           engine: 0,
           driver: 'direct'
@@ -97,9 +99,9 @@ export default {
   },
   methods: {
     toggleSearchMode () {
-      let mode = this.options.mode + 1
-      if (mode >= consts.SEARCH_MODES.length) {
-        mode = 0
+      let mode = Number(this.options.mode) + 1
+      if (!consts.SEARCH_MODES[mode]) {
+        mode = Object.keys(consts.SEARCH_MODES)[0]
       }
       this.options.mode = mode
     },
@@ -115,14 +117,9 @@ export default {
           results: []
         }
 
-        let {mode, search} = options
-        if (mode === 0) {
-          mode = 1
-          search = '%' + search.replace('%', '\\%') + '%'
-        }
         var searcher = this.$splace.search({
-          Search: search,
-          Mode: mode,
+          Search: options.search,
+          Mode: Number(options.mode),
           Tables: this.tables,
           Limit: 1000
         })
@@ -143,6 +140,45 @@ export default {
         })
         searcher.addEventListener('done', e => {
           searcher.close()
+          this.operation.end = new Date()
+        })
+      })
+    },
+    replace () {
+      this.operation = null
+      this.connect().then(() => {
+        let options = JSON.parse(JSON.stringify(this.options)) // :-(
+        this.operation = {
+          kind: 'replace',
+          start: new Date(),
+          end: null,
+          options,
+          results: []
+        }
+
+        var replacer = this.$splace.replace({
+          Search: options.search,
+          Replace: options.replace,
+          Mode: Number(options.mode),
+          Tables: this.tables,
+          Limit: 1000
+        })
+        replacer.addEventListener('table', e => {
+          let data = JSON.parse(e.data)
+          this.operation.results.push({
+            table: data.Table,
+            sql: data.SQL,
+            columns: data.Columns,
+            rows: [],
+            start: data.Start
+          })
+        })
+        replacer.addEventListener('affected_rows', e => {
+          let index = this.operation.results.length - 1
+          this.operation.results[index].affected_rows += JSON.parse(e.data)
+        })
+        replacer.addEventListener('done', e => {
+          replacer.close()
           this.operation.end = new Date()
         })
       })

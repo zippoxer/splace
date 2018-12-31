@@ -12,7 +12,7 @@ type SearchOptions struct {
 	Mode   Mode
 
 	// Tables is a map of selected table names and column names.
-	Tables map[string][]string
+	Tables TableMap
 
 	// Limit sets the maximum amount of rows returned by each query.
 	// A lower limit would provide frequent progress updates,
@@ -62,7 +62,13 @@ func (s *Searcher) start() {
 func (s *Searcher) search() error {
 	qb := &queryBuilder{}
 	for table, columns := range s.opt.Tables {
-		if err := s.searchTable(qb, table, columns); err != nil {
+		var cols []string
+		for _, col := range columns {
+			if isColumnTypeReplacable(col.Type) {
+				cols = append(cols, col.Column)
+			}
+		}
+		if err := s.searchTable(qb, table, cols); err != nil {
 			return err
 		}
 	}

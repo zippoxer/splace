@@ -75,6 +75,7 @@ func (s *Server) Run() error {
 	e.GET("/", s.index)
 	e.POST("/connect", s.connect)
 	e.GET("/search", s.search)
+	e.GET("/replace", s.replace)
 	e.GET("/dump", s.dump)
 
 	return http.Serve(ln, e)
@@ -126,7 +127,7 @@ type connectReq struct {
 }
 
 type connectResp struct {
-	Tables map[string][]string
+	Tables splace.TableMap
 }
 
 func (s *Server) connect(c echo.Context) error {
@@ -248,7 +249,40 @@ func (s *Server) search(c echo.Context) error {
 }
 
 func (s *Server) replace(c echo.Context) error {
-	return nil
+	var options splace.ReplaceOptions
+
+	if err := json.Unmarshal([]byte(c.QueryParam("options")), &options); err != nil {
+		return err
+	}
+
+	replacer := s.splace.Replace(c.Request().Context(), options)
+	stream := sse.Open(c.Response().Writer)
+
+	for {
+		select {
+		case result := <-replacer.Results():
+			stream.Send("table", struct {
+				Table string
+				SQL   string
+				Start time.Time
+			}{
+				Table: result.Table,
+				SQL:   result.SQL,
+				Start: result.Start,
+			})
+
+			for n := range result.AffectedRows {
+				stream.Send("affected_rows", n)
+			}
+		case err := <-replacer.Done():
+			stream.Send("done", struct {
+				Error error
+			}{
+				err,
+			})
+			return stream.Wait()
+		}
+	}
 }
 
 type Template struct {

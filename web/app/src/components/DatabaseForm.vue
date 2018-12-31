@@ -6,10 +6,10 @@
           <legend class="uk-text-lead uk-width-auto">MySQL</legend>
           <vk-icon icon="triangle-down"/>
         </div>
-        <vk-button
+        <vk-button-link
           type="link"
           href="/dump"
-          tabindex="-1">Download backup</vk-button>
+          tabindex="-1">Download backup</vk-button-link>
       </div>
       <vk-grid
         class="uk-margin"
