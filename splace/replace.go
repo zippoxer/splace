@@ -109,6 +109,9 @@ func (r *Replacer) replaceTable(qb *queryBuilder, table string, columns []string
 			return nil
 		}
 		iterations <- int(rowsAffected)
+		if r.opt.Limit == 0 {
+			return nil
+		}
 	}
 }
 

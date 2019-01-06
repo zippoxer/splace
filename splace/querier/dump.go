@@ -8,8 +8,6 @@ import (
 	"net"
 	"os/exec"
 	"path/filepath"
-
-	"github.com/go-sql-driver/mysql"
 )
 
 type dumpError struct {
@@ -21,8 +19,8 @@ func (e dumpError) Error() string {
 	return fmt.Sprintf("%v; %s", e.err, string(e.output))
 }
 
-func mysqldump(ctx context.Context, config *mysql.Config, w io.Writer) error {
-	host, port, err := net.SplitHostPort(config.Addr)
+func mysqldump(ctx context.Context, cfg Config, w io.Writer) error {
+	host, port, err := net.SplitHostPort(cfg.Addr)
 	if err != nil {
 		return err
 	}
@@ -31,10 +29,10 @@ func mysqldump(ctx context.Context, config *mysql.Config, w io.Writer) error {
 		filepath.Join("data", "mysqldump"),
 		"-h", host,
 		"--port", port,
-		"-u", config.User,
-		"--password="+config.Passwd,
+		"-u", cfg.User,
+		"--password="+cfg.Pwd,
 		"--column-statistics=0",
-		config.DBName)
+		cfg.Database)
 	var errBuff bytes.Buffer
 	cmd.Stderr = &errBuff
 	cmd.Stdout = w

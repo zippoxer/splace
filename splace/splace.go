@@ -44,7 +44,11 @@ func (s *Splace) Replace(ctx context.Context, opt ReplaceOptions) *Replacer {
 }
 
 func (s *Splace) Tables(ctx context.Context) (TableMap, error) {
-	rows, err := s.db.Query(ctx, `SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS where TABLE_SCHEMA = ?`, s.db.Database())
+	query := `SELECT TABLE_NAME, COLUMN_NAME, COLUMN_TYPE FROM ` +
+		`INFORMATION_SCHEMA.COLUMNS where TABLE_SCHEMA = ?`
+	rows, err := s.db.Query(ctx,
+		query,
+		s.db.Config().Database)
 	if err != nil {
 		return nil, err
 	}

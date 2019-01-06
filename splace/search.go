@@ -2,6 +2,7 @@ package splace
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/zippoxer/splace/splace/querier"
@@ -35,47 +36,84 @@ type SearchResult struct {
 }
 
 type Searcher struct {
-	ctx context.Context
-	db  querier.Querier
-	opt SearchOptions
+	ctx       context.Context
+	ctxCancel context.CancelFunc
+	db        querier.Querier
+	opt       SearchOptions
 
 	results chan SearchResult
 	done    chan error
 }
 
+type searchTask struct {
+	table   string
+	columns []string
+}
+
 func newSearcher(ctx context.Context, db querier.Querier, opt SearchOptions) *Searcher {
+	c, cancel := context.WithCancel(ctx)
 	return &Searcher{
-		ctx:     ctx,
-		db:      db,
-		opt:     opt,
-		results: make(chan SearchResult, 32),
-		done:    make(chan error),
+		ctx:       c,
+		ctxCancel: cancel,
+		db:        db,
+		opt:       opt,
+		results:   make(chan SearchResult, 32),
+		done:      make(chan error),
 	}
 }
 
 func (s *Searcher) start() {
 	defer close(s.results)
 	defer close(s.done)
-	s.done <- s.search()
-}
 
-func (s *Searcher) search() error {
-	qb := &queryBuilder{}
-	for table, columns := range s.opt.Tables {
-		var cols []string
-		for _, col := range columns {
-			if isColumnTypeReplacable(col.Type) {
-				cols = append(cols, col.Column)
+	var (
+		tasks = make(chan searchTask)
+		wg    sync.WaitGroup
+		wgErr error
+	)
+	defer func() {
+		s.done <- wgErr
+	}()
+
+	// Produce a search task for each table.
+	go func() {
+		defer close(tasks)
+		for table, columns := range s.opt.Tables {
+			var columnNames []string
+			for _, col := range columns {
+				columnNames = append(columnNames, col.Column)
+			}
+			if len(columnNames) == 0 {
+				continue
+			}
+			tasks <- searchTask{
+				table:   table,
+				columns: columnNames,
 			}
 		}
-		if err := s.searchTable(qb, table, cols); err != nil {
-			return err
-		}
+	}()
+
+	// Spawn a fixed amount of workers.
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for task := range tasks {
+				err := s.searchTable(task.table, task.columns)
+				if err != nil && s.ctx.Err() != context.Canceled {
+					// Cancel all tasks.
+					s.ctxCancel()
+					wgErr = err
+				}
+			}
+		}()
 	}
-	return nil
+
+	wg.Wait()
 }
 
-func (s *Searcher) searchTable(qb *queryBuilder, table string, columns []string) error {
+func (s *Searcher) searchTable(table string, columns []string) error {
+	qb := &queryBuilder{}
 	iterations := make(chan []string, 128)
 	defer close(iterations)
 
@@ -125,7 +163,7 @@ func (s *Searcher) searchTable(qb *queryBuilder, table string, columns []string)
 		if rows.Err() != nil {
 			return err
 		}
-		if n == 0 {
+		if s.opt.Limit == 0 || n == 0 {
 			return nil
 		}
 

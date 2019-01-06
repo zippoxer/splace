@@ -2,15 +2,14 @@ package web
 
 import (
 	"compress/gzip"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
 	"net"
 	"net/http"
-	"net/url"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/zippoxer/splace/splace"
@@ -53,7 +52,7 @@ func (s *Server) Run() error {
 
 	e := echo.New()
 	e.Debug = s.debug()
-	e.Use(middleware.Logger())
+	// e.Use(middleware.Logger())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins: []string{"http://localhost:8080", "http://" + s.addr.String()},
 		AllowMethods: []string{http.MethodGet, http.MethodPut, http.MethodPost, http.MethodDelete},
@@ -136,24 +135,22 @@ func (s *Server) connect(c echo.Context) error {
 		return err
 	}
 
+	config := querier.Config{
+		Engine:   querier.Engine(req.Engine),
+		Addr:     req.Host,
+		Database: req.Database,
+		User:     req.User,
+		Pwd:      req.Pwd,
+	}
 	switch req.Driver {
 	case "direct":
-		u := &url.URL{
-			Host: fmt.Sprintf("tcp(%s)", req.Host),
-			Path: req.Database,
-			User: url.UserPassword(req.User, req.Pwd),
-		}
-		dsn := u.String()[2:]
-		db, err := sql.Open("mysql", dsn)
-		if err != nil {
-			return err
-		}
-		s.db, err = querier.NewDirect(querier.Engine(req.Engine), dsn, db)
+		var err error
+		s.db, err = querier.NewDirect(config)
 		if err != nil {
 			return err
 		}
 	case "php":
-		qr, err := querier.NewPHP(req.URL, req.Secret)
+		qr, err := querier.NewPHP(req.URL, req.Secret, config)
 		if err != nil {
 			return err
 		}
@@ -173,7 +170,7 @@ func (s *Server) connect(c echo.Context) error {
 
 func (s *Server) dump(c echo.Context) error {
 	filename := fmt.Sprintf("%s--%s.sql.gz",
-		s.db.Database(),
+		s.db.Config().Database,
 		time.Now().Format("2006-02-01--15-04-05"))
 	c.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	c.Response().Header().Set("Content-Type", "application/sql")
@@ -198,16 +195,10 @@ func (s *Server) search(c echo.Context) error {
 
 	searcher := s.splace.Search(c.Request().Context(), options)
 	stream := sse.Open(c.Response().Writer)
+	defer stream.Close()
 
-	ticker := time.NewTicker(time.Millisecond * 150)
-	defer ticker.Stop()
-	buff := make([][]string, 0, 1024)
-	sendRows := func() {
-		if len(buff) > 0 {
-			stream.Send("rows", buff)
-			buff = make([][]string, 0, 1024)
-		}
-	}
+	var wg sync.WaitGroup
+	lastSendRows := time.Now()
 	for {
 		select {
 		case result := <-searcher.Results():
@@ -221,29 +212,82 @@ func (s *Server) search(c echo.Context) error {
 				Start: result.Start,
 			})
 
-			for row := range result.Rows {
-				buff = append(buff, row)
+			wg.Add(1)
+			go func(result splace.SearchResult) {
+				defer wg.Done()
 
-				// If rows buffer is full or the update interval
-				// has passed, send the rows.
-				if len(buff) == cap(buff) {
-					sendRows()
-				} else {
-					select {
-					case <-ticker.C:
-						sendRows()
-					default:
+				buffLimit := 500
+				buff := make([][]string, buffLimit)
+				buffPos := 0
+				buffSize := 0
+				sendRows := func() {
+					if buffPos > 0 {
+						stream.Send("rows", []interface{}{
+							result.Table,
+							buffPos,
+							buff[:buffPos],
+						})
+						buffPos = 0
+						buffSize = 0
+						lastSendRows = time.Now()
 					}
 				}
-			}
-			sendRows()
+
+				rowCount := 0
+				sendRowCount := func() {
+					if rowCount > 0 {
+						stream.Send("rows", []interface{}{
+							result.Table,
+							rowCount,
+						})
+						rowCount = 0
+						lastSendRows = time.Now()
+					}
+				}
+				for row := range result.Rows {
+					if buffPos == buffLimit {
+						rowCount++
+						if time.Since(lastSendRows) > time.Millisecond*200 {
+							sendRowCount()
+						}
+						continue
+					}
+
+					buff[buffPos] = row
+					buffPos++
+
+					for _, v := range row {
+						buffSize += len(v)
+					}
+
+					// If rows buffer is full or the update interval
+					// has passed, send the rows.
+					if buffSize >= 128*1024 ||
+						time.Since(lastSendRows) > time.Millisecond*200 {
+						sendRows()
+					}
+				}
+				sendRows()
+				sendRowCount()
+			}(result)
+
 		case err := <-searcher.Done():
-			stream.Send("done", struct {
-				Error error
-			}{
-				err,
-			})
-			return stream.Wait()
+			wg.Wait()
+
+			var msg struct {
+				Error *string
+			}
+			if err != nil {
+				s := err.Error()
+				msg.Error = &s
+			}
+			stream.Send("done", msg)
+
+			return stream.Close()
+
+		case err := <-stream.Err():
+			wg.Wait()
+			return err
 		}
 	}
 }
@@ -257,7 +301,9 @@ func (s *Server) replace(c echo.Context) error {
 
 	replacer := s.splace.Replace(c.Request().Context(), options)
 	stream := sse.Open(c.Response().Writer)
+	defer stream.Close()
 
+	var wg sync.WaitGroup
 	for {
 		select {
 		case result := <-replacer.Results():
@@ -271,16 +317,31 @@ func (s *Server) replace(c echo.Context) error {
 				Start: result.Start,
 			})
 
-			for n := range result.AffectedRows {
-				stream.Send("affected_rows", n)
-			}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for n := range result.AffectedRows {
+					stream.Send("affected_rows", []interface{}{result.Table, n})
+				}
+			}()
+
 		case err := <-replacer.Done():
-			stream.Send("done", struct {
-				Error error
-			}{
-				err,
-			})
-			return stream.Wait()
+			wg.Wait()
+
+			var msg struct {
+				Error *string
+			}
+			if err != nil {
+				s := err.Error()
+				msg.Error = &s
+			}
+			stream.Send("done", msg)
+
+			return stream.Close()
+
+		case err := <-stream.Err():
+			wg.Wait()
+			return err
 		}
 	}
 }

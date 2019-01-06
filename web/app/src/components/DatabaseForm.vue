@@ -24,7 +24,6 @@
                 v-model="value.host"
                 class="uk-input"
                 placeholder="Host"
-                id="form-stacked-text"
                 type="text">
             </div>
           </div>
@@ -39,7 +38,6 @@
                 v-model="value.database"
                 class="uk-input"
                 placeholder="Database Name"
-                id="form-stacked-text"
                 type="text">
             </div>
           </div>
@@ -54,7 +52,6 @@
                 v-model="value.user"
                 class="uk-input"
                 placeholder="User"
-                id="form-stacked-text"
                 type="text">
             </div>
           </div>
@@ -69,7 +66,6 @@
                 v-model="value.password"
                 class="uk-input"
                 placeholder="Password"
-                id="form-stacked-text"
                 type="password">
             </div>
           </div>
@@ -123,6 +119,7 @@
                   class="uk-form-icon"
                   icon="world"/>
                 <input
+                  v-model="value.url"
                   type="text"
                   class="uk-input uk-width-1"
                   placeholder="http://example.com/splace-proxy.php" >

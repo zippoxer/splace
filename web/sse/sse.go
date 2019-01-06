@@ -16,6 +16,7 @@ type Stream struct {
 	flusher http.Flusher
 	event   chan event
 	err     chan error
+	closed  bool
 }
 
 func Open(w http.ResponseWriter) *Stream {
@@ -35,8 +36,9 @@ func Open(w http.ResponseWriter) *Stream {
 }
 
 func (s *Stream) encoder() {
-	enc := json.NewEncoder(s.w)
+	defer close(s.err)
 	var err error
+	enc := json.NewEncoder(s.w)
 	for e := range s.event {
 		_, err = fmt.Fprintf(s.w, "event: %s\ndata: ", e.typ)
 		if err != nil {
@@ -64,9 +66,15 @@ func (s *Stream) Send(ev string, data interface{}) {
 	}
 }
 
-func (s *Stream) Wait() error {
+func (s *Stream) Close() error {
+	if s.closed {
+		return nil
+	}
+	s.closed = true
 	close(s.event)
-	err := <-s.err
-	close(s.err)
-	return err
+	return <-s.err
+}
+
+func (s *Stream) Err() <-chan error {
+	return s.err
 }

@@ -4,18 +4,17 @@
       <h4
         v-if="operation.end"
         class="uk-flex-1 uk-margin-remove-bottom">
-        Search for "{{ operation.options.search }}" (took {{ took }})
+        Search for "{{ operation.options.search }}" ({{ took }} seconds)
       </h4>
       <h4
         v-else
         class="uk-flex-1 uk-margin-remove-bottom">
-        <vk-spinner
-          ratio="0.75"
-          class="uk-margin-small-right" /> Searching for "{{ operation.options.search }}"
+        Searching for "{{ operation.options.search }}"
       </h4>
-      <div>
+      <div v-if="!noResults">
         <vk-button
           v-if="operation.end"
+          icon="search"
           class="uk-button-danger "
           :disabled="selected.length == 0">
           <span v-if="selected.length">
@@ -25,37 +24,49 @@
         </vk-button>
         <vk-button
           v-else
-          class="uk-width-small">Stop</vk-button>
+          @click="operation.cancel"
+          class="uk-width-small uk-inline">
+          <vk-spinner
+            ratio="0.55"
+            class="uk-position-center-left uk-position-small" />
+          Stop
+        </vk-button>
       </div>
     </div>
-    <ul class="uk-list uk-list-divider table-list">
+    <p
+      v-if="noResults"
+      class="uk-text-muted">😔 No results found.</p>
+    <ul
+      v-else-if="operation.result.totalRows"
+      class="uk-list uk-list-divider table-list">
       <template
-        v-for="(result, resultIndex) in operation.results">
+        v-for="(table, tableName) in operation.result.tables">
         <li
-          v-if="result.rows.length"
-          :key="resultIndex"
-          :class="{'selected': selected.includes(resultIndex),
-                   'expanded': expanded.includes(resultIndex)}"
-          @click="expandTable(resultIndex)">
+          v-if="operation.result.rows[tableName].length"
+          :key="tableName"
+          :class="{'selected': selected.includes(tableName),
+                   'expanded': expanded.includes(tableName)}"
+          @click="expandTable(tableName)">
           <div class="uk-flex uk-flex-middle">
-            <div class="uk-margin-right">
+            <label
+              class="replace-checkbox"
+              @click.stop>
               <input
                 v-model="selected"
-                :value="resultIndex"
-                @click.stop
+                :value="tableName"
                 type="checkbox"
                 class="uk-checkbox" >
-            </div>
-            <span class="uk-flex-1">
-              {{ result.table }}
+            </label>
+            <span class="uk-flex-1 table-name">
+              {{ tableName }}
             </span>
             <div>
-              <i>{{ result.rows.length }} matching rows</i>
-              <vk-icon :icon="expanded.includes(resultIndex) ? 'chevron-up' : 'chevron-down'" />
+              <i>{{ table.totalRows }} matching rows</i>
+              <vk-icon :icon="expanded.includes(tableName) ? 'chevron-up' : 'chevron-down'" />
             </div>
           </div>
           <div
-            v-if="expanded.includes(resultIndex)"
+            v-if="expanded.includes(tableName)"
             class="uk-overflow-auto table-rows">
             <table
               class="uk-table uk-table-small uk-table-divider"
@@ -63,19 +74,19 @@
               <thead>
                 <tr>
                   <th
-                    v-for="(column, i) in tables[result.table]"
+                    v-for="(column, i) in tables[tableName]"
                     :key="i">{{ column.Column }}</th>
                 </tr>
               </thead>
               <tbody>
                 <tr
-                  v-for="(row, i) in result.rows"
+                  v-for="(row, i) in operation.result.rows[tableName]"
                   :key="i">
                   <td
                     v-for="(value, j) in row"
                     :key="j">
                     <span
-                      v-for="(v, i) in highlightCache[resultIndex][i][j]"
+                      v-for="(v, i) in highlightCache[tableName][i][j]"
                       :key="i"
                       :class="{'hl': v[0]}">{{ v[1] }}</span>
                   </td>
@@ -116,7 +127,8 @@ export default {
         this.expanded.splice(i, 1)
       } else {
         this.expanded.push(index)
-        let rows = this.operation.results[index].rows
+        let table = this.operation.result.tables[index].table
+        let rows = this.operation.result.rows[table]
         this.highlightCache[index] = rows.map(row => row.map(v => this.highlightRow(v)))
       }
     },
@@ -142,7 +154,10 @@ export default {
   computed: {
     took () {
       let ms = this.operation.end - this.operation.start
-      return Number(ms / 1e3).toFixed(1) + 's'
+      return Number(ms / 1e3).toFixed(2)
+    },
+    noResults () {
+      return this.operation.end && this.operation.result.totalRows === 0
     }
   }
 }
@@ -157,18 +172,37 @@ export default {
     margin: 0 !important;
     padding: 10px !important;
     cursor: pointer;
+    position: relative;
     &.expanded {
       background-color: #f8f8f8;
     }
     &.selected {
       background-color: #ffffdd;
     }
+    .replace-checkbox {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 40px;
+      height: 43.5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+
+      input {
+        margin-top: 2px;
+      }
+    }
+    .table-name {
+      margin-left: 30px;
+    }
   }
 
   .table-rows {
-    margin-top: 10px;
     background-color: #fff;
     max-height: 350px;
+    margin-top: 10px;
     cursor: default;
 
     table {

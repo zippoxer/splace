@@ -8,20 +8,22 @@ import (
 )
 
 type Direct struct {
-	db     *sql.DB
-	engine Engine
-	dsn    dsn
+	db  *sql.DB
+	cfg Config
 }
 
-func NewDirect(engine Engine, dataSourceName string, db *sql.DB) (*Direct, error) {
-	dsn, err := parseDSN(engine, dataSourceName)
+func NewDirect(cfg Config) (*Direct, error) {
+	dsn, err := cfg.String()
+	if err != nil {
+		return nil, err
+	}
+	db, err := sql.Open(cfg.Engine.String(), dsn)
 	if err != nil {
 		return nil, err
 	}
 	return &Direct{
-		db:     db,
-		dsn:    dsn,
-		engine: engine,
+		db:  db,
+		cfg: cfg,
 	}, nil
 }
 
@@ -35,20 +37,19 @@ func (d *Direct) Query(ctx context.Context, query string, args ...interface{}) (
 }
 
 func (d *Direct) Dump(ctx context.Context, w io.Writer) error {
-	switch d.engine {
+	switch d.cfg.Engine {
 	case MySQL:
-		dsn := d.dsn.(mysqlDSN)
-		return mysqldump(ctx, dsn.config, w)
+		return mysqldump(ctx, d.cfg, w)
 	}
-	return fmt.Errorf("dumps for %s are not supported yet", d.engine)
+	return fmt.Errorf("dumps for %s are not supported yet", d.cfg.Engine)
 }
 
-func (d *Direct) Engine() Engine {
-	return d.engine
+func (d *Direct) Config() Config {
+	return d.cfg
 }
 
-func (d *Direct) Database() string {
-	return d.dsn.Database()
+func (d *Direct) Close() error {
+	return d.db.Close()
 }
 
 type directRows struct {

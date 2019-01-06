@@ -12,9 +12,14 @@ export default class Splace extends EventEmitter {
   }
 
   search (options) {
-    return new EventSource(this.url + '/search?options=' +
+    let src = new EventSource(this.url + '/search?options=' +
       encodeURIComponent(JSON.stringify(options)),
     { retry: null })
+    src.cancel = () => {
+      src.close()
+      src.dispatchEvent(new Event('cancel'))
+    }
+    return src
   }
 
   replace (options) {
