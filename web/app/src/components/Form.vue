@@ -1,5 +1,14 @@
 <template>
   <div>
+    <vk-notification
+      status="danger"
+      position="bottom-center"
+      :messages.sync="errors">
+      <div slot-scope="{ message }">
+        Error: {{ message }}
+      </div>
+    </vk-notification>
+
     <form @submit="search">
       <!-- Search/Replace inputs -->
       <div class="uk-container">
@@ -100,6 +109,7 @@ export default {
   data () {
     return {
       consts,
+      errors: [],
       tables: {},
       currentSearch: null,
       currentReplace: null,
@@ -152,72 +162,74 @@ export default {
       this.currentSearch = null
       this.currentReplace = null
       let options = JSON.parse(JSON.stringify(this.options)) // :-(
-      this.currentSearch = {
-        kind: 'search',
-        start: new Date(),
-        end: null,
-        options,
-        cancel: () => {},
-        result: {
-          tables: {},
-          rows: {},
-          totalRows: 0
-        }
-      }
-
       this.$nextTick(() => {
-        document.querySelector('.result-tabs ul.uk-tab li:first-child a').click()
-      })
-
-      this.connect().then(() => {
-        let lastUpdate = null
-        let searcher = this.$splace.search({
-          Search: options.search,
-          Mode: Number(options.mode),
-          Tables: this.tables,
-          Limit: 0
-        })
-        this.currentSearch.cancel = searcher.cancel
-        searcher.addEventListener('table', e => {
-          let data = JSON.parse(e.data)
-          this.currentSearch.result.rows[data.Table] = []
-          let table = {
-            table: data.Table,
-            sql: data.SQL,
-            columns: data.Columns,
-            totalRows: 0,
-            start: data.Start
+        this.currentSearch = {
+          kind: 'search',
+          start: new Date(),
+          end: null,
+          options,
+          cancel: () => {},
+          result: {
+            tables: {},
+            rows: {},
+            totalRows: 0
           }
-          if (lastUpdate === null || new Date() - lastUpdate > 100) {
-            this.$set(this.currentSearch.result.tables, data.Table, table)
-            lastUpdate = new Date()
-          } else {
-            this.currentSearch.result.tables[data.Table] = table
-          }
-        })
-        searcher.addEventListener('rows', e => {
-          let data = JSON.parse(e.data)
-          let table = data[0]
-          let rowCount = data[1]
-          this.currentSearch.result.tables[table].totalRows += rowCount
-          this.currentSearch.result.totalRows += rowCount
-          if (data.length === 3) {
-            let rows = data[2]
-            let newRows = this.currentSearch.result.rows[table].concat(rows)
-            this.currentSearch.result.rows[table] = newRows
-          }
-        })
-        searcher.addEventListener('done', e => {
-          searcher.close()
-          this.$set(this.currentSearch, 'end', new Date())
-        })
-        searcher.addEventListener('cancel', e => {
-          this.$set(this.currentSearch, 'end', new Date())
-        })
-        searcher.onerror = (e) => {
-          searcher.close()
-          console.error(e)
         }
+
+        this.$nextTick(() => {
+          document.querySelector('.result-tabs ul.uk-tab li:first-child a').click()
+        })
+
+        this.connect().then(() => {
+          let lastUpdate = null
+          let searcher = this.$splace.search({
+            Search: options.search,
+            Mode: Number(options.mode),
+            Tables: this.tables,
+            Limit: 0
+          })
+          this.currentSearch.cancel = searcher.cancel
+          searcher.addEventListener('table', e => {
+            let data = JSON.parse(e.data)
+            this.currentSearch.result.rows[data.Table] = []
+            let table = {
+              table: data.Table,
+              sql: data.SQL,
+              columns: data.Columns,
+              totalRows: 0,
+              start: data.Start
+            }
+            if (lastUpdate === null || new Date() - lastUpdate > 100) {
+              this.$set(this.currentSearch.result.tables, data.Table, table)
+              lastUpdate = new Date()
+            } else {
+              this.currentSearch.result.tables[data.Table] = table
+            }
+          })
+          searcher.addEventListener('rows', e => {
+            let data = JSON.parse(e.data)
+            let table = data[0]
+            let rowCount = data[1]
+            this.currentSearch.result.tables[table].totalRows += rowCount
+            this.currentSearch.result.totalRows += rowCount
+            if (data.length === 3) {
+              let rows = data[2]
+              let newRows = this.currentSearch.result.rows[table].concat(rows)
+              this.currentSearch.result.rows[table] = newRows
+            }
+          })
+          searcher.addEventListener('done', e => {
+            searcher.close()
+            this.$set(this.currentSearch, 'end', new Date())
+          })
+          searcher.addEventListener('cancel', e => {
+            this.$set(this.currentSearch, 'end', new Date())
+          })
+          searcher.onerror = (e) => {
+            searcher.close()
+            console.error(e)
+          }
+        })
       })
     },
     replace () {
@@ -286,6 +298,9 @@ export default {
       }).then(resp => {
         this.tables = resp.Tables
         return resp
+      }).catch(e => {
+        this.errors.push(e.response.data.Error)
+        throw e
       })
     }
   }
@@ -300,5 +315,12 @@ export default {
   > .uk-width-expand {
     padding-left: 0 !important;
   }
+}
+
+.uk-notification-message {
+  background-color: #fff;
+  -webkit-box-shadow: 0px 2px 20px -8px rgba(0, 0, 0, 0.35);
+  -moz-box-shadow: 0px 2px 20px -8px rgba(0, 0, 0, 0.35);
+  box-shadow: 0px 2px 20px -8px rgba(0, 0, 0, 0.35);
 }
 </style>

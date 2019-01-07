@@ -1,16 +1,22 @@
 package web
 
 import (
+	"bytes"
 	"compress/gzip"
+	"crypto/sha512"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
+	"io/ioutil"
 	"net"
 	"net/http"
 	"path/filepath"
 	"sync"
 	"time"
+
+	uuid "github.com/satori/go.uuid"
 
 	"github.com/zippoxer/splace/splace"
 	"github.com/zippoxer/splace/splace/querier"
@@ -32,10 +38,20 @@ type Server struct {
 	addr   net.Addr
 	db     querier.Querier
 	splace *splace.Splace
+
+	// Secret is a cryptographically generated random for this session.
+	secret string
 }
 
 func New(opt Options) *Server {
-	return &Server{opt: opt}
+	secret, err := uuid.NewV4()
+	if err != nil {
+		panic("can't generated uuid: " + err.Error())
+	}
+	return &Server{
+		opt:    opt,
+		secret: secret.String(),
+	}
 }
 
 func (s *Server) Addr() net.Addr {
@@ -76,6 +92,7 @@ func (s *Server) Run() error {
 	e.GET("/search", s.search)
 	e.GET("/replace", s.replace)
 	e.GET("/dump", s.dump)
+	e.GET("/download-php-proxy", s.downloadPhpProxy)
 
 	return http.Serve(ln, e)
 }
@@ -121,8 +138,7 @@ type connectReq struct {
 	User     string
 	Pwd      string
 
-	URL    string
-	Secret string
+	URL string
 }
 
 type connectResp struct {
@@ -150,7 +166,7 @@ func (s *Server) connect(c echo.Context) error {
 			return err
 		}
 	case "php":
-		qr, err := querier.NewPHP(req.URL, req.Secret, config)
+		qr, err := querier.NewPHP(req.URL, s.secret, config)
 		if err != nil {
 			return err
 		}
@@ -184,6 +200,24 @@ func (s *Server) dump(c echo.Context) error {
 	}
 
 	return w.Flush()
+}
+
+func (s *Server) downloadPhpProxy(c echo.Context) error {
+	data, err := ioutil.ReadFile(filepath.Join("data", "splace-proxy.php"))
+	if err != nil {
+		return err
+	}
+	rawHash := sha512.Sum512([]byte(s.secret))
+	secretHash := hex.EncodeToString(rawHash[:])
+	data = bytes.Replace(data,
+		[]byte("<Splace Secret Hash Placeholder>"),
+		[]byte("'"+secretHash+"'"),
+		-1)
+
+	c.Response().Header().Set("Content-Disposition", "attachment; filename=splace-proxy.php")
+	c.Response().Header().Set("Content-Type", "application/php")
+	_, err = c.Response().Write(data)
+	return err
 }
 
 func (s *Server) search(c echo.Context) error {

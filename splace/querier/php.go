@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net/http"
 )
 
@@ -83,7 +82,13 @@ func (p *PHP) Query(ctx context.Context, query string, args ...interface{}) (Row
 }
 
 func (p *PHP) Dump(ctx context.Context, w io.Writer) error {
-	return nil
+	resp, err := p.cmd("dump", nil)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	_, err = io.Copy(w, resp.Body)
+	return err
 }
 
 func (p *PHP) Config() Config {
@@ -96,6 +101,10 @@ func (p *PHP) Close() error {
 
 func (p *PHP) cmd(cmd string, args cmdArgs) (*http.Response, error) {
 	form := args
+	if form == nil {
+		form = cmdArgs{}
+	}
+	form["Secret"] = p.secret
 	form["Cmd"] = cmd
 	form["Config"] = p.Config()
 	data, err := json.Marshal(form)
@@ -111,11 +120,12 @@ func (p *PHP) cmd(cmd string, args cmdArgs) (*http.Response, error) {
 		return p.cmd(cmd, args)
 	}
 	if resp.StatusCode != http.StatusOK {
-		data, err := ioutil.ReadAll(resp.Body)
-		if err != nil {
+		defer resp.Body.Close()
+		var msg string
+		if err := json.NewDecoder(resp.Body).Decode(&msg); err != nil {
 			return nil, err
 		}
-		return nil, errors.New(string(data))
+		return nil, errors.New(msg)
 	}
 	return resp, nil
 }

@@ -98,9 +98,9 @@
                 <vk-icon
                   class="uk-form-icon"
                   icon="download" />
-                <vk-button>
+                <vk-button-link href="/download-php-proxy">
                   Download
-                </vk-button>
+                </vk-button-link>
               </div>
             </div>
           </div>
