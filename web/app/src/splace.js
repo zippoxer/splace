@@ -45,7 +45,6 @@ export default class Splace extends EventEmitter {
 
   _handleError (e) {
     console.error(e)
-    this.emit('error', e)
-    throw e
+    this.emit('error', e.response.data, e)
   }
 }

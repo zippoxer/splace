@@ -18,8 +18,8 @@ type PHP struct {
 	secret string
 	cfg    Config
 
-	info   phpInfo
-	client *http.Client
+	handshake phpHandshake
+	client    *http.Client
 }
 
 func NewPHP(url, secret string, cfg Config) (*PHP, error) {
@@ -41,15 +41,15 @@ func NewPHP(url, secret string, cfg Config) (*PHP, error) {
 		return nil, err
 	}
 	defer resp.Body.Close()
-	if err := json.NewDecoder(resp.Body).Decode(&p.info); err != nil {
+	if err := json.NewDecoder(resp.Body).Decode(&p.handshake); err != nil {
 		return nil, err
 	}
 
 	return p, nil
 }
 
-func (p *PHP) Info() phpInfo {
-	return p.info
+func (p *PHP) DiscoveredConfigs() []DiscoveredConfig {
+	return p.handshake.DiscoveredConfigs
 }
 
 func (p *PHP) Exec(ctx context.Context, query string, args ...interface{}) (Result, error) {
@@ -121,6 +121,13 @@ func (p *PHP) cmd(cmd string, args cmdArgs) (*http.Response, error) {
 	}
 	if resp.StatusCode != http.StatusOK {
 		defer resp.Body.Close()
+
+		switch resp.StatusCode {
+		case http.StatusUnauthorized:
+			return nil, fmt.Errorf("Can not access splace-proxy.php, try downloading & uploading it again.")
+		case http.StatusNotFound:
+		}
+
 		var msg string
 		if err := json.NewDecoder(resp.Body).Decode(&msg); err != nil {
 			return nil, err
@@ -213,17 +220,6 @@ func (r *phpRows) Close() error {
 	return r.body.Close()
 }
 
-type DiscoveredConfig struct {
-	// Who specifies the name of the CMS or framework.
-	Who string
-
-	// Where specifies the filename, environment variable name or
-	// wherever else the config was discovered.
-	Where string
-
-	Config Config
-}
-
-type phpInfo struct {
+type phpHandshake struct {
 	DiscoveredConfigs []DiscoveredConfig
 }

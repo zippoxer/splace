@@ -1,6 +1,6 @@
 <template>
   <div class="uk-container">
-    <form class="uk-form-stacked uk-margin">
+    <div class="uk-form-stacked uk-margin">
       <div class="uk-flex uk-middle">
         <div class="uk-flex-1 uk-flex uk-flex-middle">
           <legend class="uk-text-lead uk-width-auto">MySQL</legend>
@@ -71,9 +71,9 @@
           </div>
         </div>
       </vk-grid>
-    </form>
+    </div>
     <div class="uk-flex">
-      <form class="uk-form-stacked uk-margin-medium-right">
+      <div class="uk-form-stacked uk-margin-medium-right">
         <label class="uk-form-label">Connection</label>
         <select
           class="uk-select uk-width-auto"
@@ -83,9 +83,9 @@
             :key="key"
             :value="key">{{ label }}</option>
         </select>
-      </form>
+      </div>
       <template v-if="value.driver == 'php'">
-        <form
+        <div
           class="uk-form-stacked uk-margin-medium-right uk-flex-none">
           <div>
             <label
@@ -104,8 +104,8 @@
               </div>
             </div>
           </div>
-        </form>
-        <form
+        </div>
+        <div
           class="uk-form-stacked uk-flex-1">
           <div>
             <label
@@ -114,19 +114,46 @@
               2. Drag it to your website's public folder and fill it's URL:
             </label>
             <div class="uk-form-controls">
-              <div class="uk-inline uk-width-1">
-                <vk-icon
-                  class="uk-form-icon"
-                  icon="world"/>
-                <input
-                  v-model="value.url"
-                  type="text"
-                  class="uk-input uk-width-1"
-                  placeholder="http://example.com/splace-proxy.php" >
+              <div class="uk-flex uk-flex-middle">
+                <div class="uk-inline uk-width-1">
+                  <vk-icon
+                    class="uk-form-icon"
+                    icon="world"/>
+                  <input
+                    v-model="value.url"
+                    @keypress.enter.prevent="$emit('check')"
+                    type="text"
+                    class="uk-input uk-width-1"
+                    placeholder="http://example.com/splace-proxy.php">
+                </div>
+                <div class="uk-inline">
+                  <vk-icon
+                    v-if="status === 'connected'"
+                    class="uk-form-icon"
+                    icon="check" />
+                  <span
+                    v-else-if="status === 'connecting'"
+                    class="uk-position-center-left uk-margin-small-left uk-flex uk-flex-middle">
+                    <vk-spinner ratio="0.6"/>
+                  </span>
+                  <vk-icon
+                    v-else-if="status === 'error'"
+                    class="uk-form-icon"
+                    icon="warning" />
+                  <vk-icon
+                    v-else
+                    class="uk-form-icon"
+                    icon="refresh" />
+                  <vk-button
+                    @click="check"
+                    style="width: 100px">
+                    <span class="uk-margin-small-left">Check</span>
+                  </vk-button>
+                </div>
               </div>
             </div>
           </div>
-        </form>
+        </div>
       </template>
     </div>
   </div>
@@ -141,11 +168,20 @@ export default {
     value: {
       type: Object,
       required: true
+    },
+    status: {
+      type: String,
+      required: true
     }
   },
   data: function () {
     return {
       consts
+    }
+  },
+  methods: {
+    check () {
+      this.$emit('check')
     }
   }
 }

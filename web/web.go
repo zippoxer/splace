@@ -131,7 +131,7 @@ func (s *Server) index(c echo.Context) error {
 
 type connectReq struct {
 	Driver string
-	Engine int
+	Engine querier.Engine
 
 	Host     string
 	Database string
@@ -141,8 +141,16 @@ type connectReq struct {
 	URL string
 }
 
+type discoveredConfig struct {
+	Who    string
+	Where  string
+	Config connectReq
+}
+
 type connectResp struct {
-	Tables splace.TableMap
+	Tables            splace.TableMap
+	DiscoveredConfigs []discoveredConfig
+	Error             string
 }
 
 func (s *Server) connect(c echo.Context) error {
@@ -152,7 +160,7 @@ func (s *Server) connect(c echo.Context) error {
 	}
 
 	config := querier.Config{
-		Engine:   querier.Engine(req.Engine),
+		Engine:   req.Engine,
 		Addr:     req.Host,
 		Database: req.Database,
 		User:     req.User,
@@ -174,14 +182,33 @@ func (s *Server) connect(c echo.Context) error {
 	}
 
 	s.splace = splace.New(s.db)
-	tables, err := s.splace.Tables(c.Request().Context())
+
+	var resp connectResp
+
+	var err error
+	resp.Tables, err = s.splace.Tables(c.Request().Context())
 	if err != nil {
-		return err
+		resp.Error = err.Error()
 	}
 
-	return c.JSON(http.StatusOK, connectResp{
-		Tables: tables,
-	})
+	for _, c := range s.db.DiscoveredConfigs() {
+		resp.DiscoveredConfigs = append(resp.DiscoveredConfigs, discoveredConfig{
+			Who:   c.Who,
+			Where: c.Where,
+			Config: connectReq{
+				Driver: req.Driver,
+				URL:    req.URL,
+
+				Engine:   c.Config.Engine,
+				Host:     c.Config.Addr,
+				User:     c.Config.User,
+				Pwd:      c.Config.Pwd,
+				Database: c.Config.Database,
+			},
+		})
+	}
+
+	return c.JSON(http.StatusOK, resp)
 }
 
 func (s *Server) dump(c echo.Context) error {

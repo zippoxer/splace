@@ -10,31 +10,21 @@ var (
 	ErrUnsupportedEngine = errors.New("database engine is not supported")
 )
 
-type Engine int
+type Engine string
 
 const (
-	MySQL Engine = iota
-	PostgreSQL
-	SQLServer
-	Oracle
+	MySQL      Engine = "mysql"
+	PostgreSQL Engine = "postgres"
+	SQLServer  Engine = "sqlserver"
+	Oracle     Engine = "oracle"
 )
-
-func (e Engine) String() string {
-	switch e {
-	case MySQL:
-		return "mysql"
-	case PostgreSQL:
-		return "postgres"
-	case SQLServer:
-		return "sqlserver"
-	case Oracle:
-		return "oracle"
-	}
-	return ""
-}
 
 type Querier interface {
 	Config() Config
+
+	// DiscoveredConfigs returns the list of available database connections
+	// discovered by the querier.
+	DiscoveredConfigs() []DiscoveredConfig
 
 	Exec(ctx context.Context, query string, args ...interface{}) (Result, error)
 	Query(ctx context.Context, query string, args ...interface{}) (Rows, error)
@@ -54,4 +44,15 @@ type Rows interface {
 	ScanStrings() ([]string, error)
 	Err() error
 	Close() error
+}
+
+type DiscoveredConfig struct {
+	// Who specifies the name of the CMS or framework.
+	Who string
+
+	// Where specifies the filename, environment variable name or
+	// wherever else the config was discovered.
+	Where string
+
+	Config Config
 }

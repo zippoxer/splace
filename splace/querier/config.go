@@ -34,6 +34,7 @@ func (c Config) String() (string, error) {
 	switch c.Engine {
 	case MySQL:
 		cfg := mysql.NewConfig()
+		cfg.Net = "tcp"
 		cfg.Addr = c.Addr
 		cfg.User = c.User
 		cfg.Passwd = c.Pwd

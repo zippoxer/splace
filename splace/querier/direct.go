@@ -17,7 +17,7 @@ func NewDirect(cfg Config) (*Direct, error) {
 	if err != nil {
 		return nil, err
 	}
-	db, err := sql.Open(cfg.Engine.String(), dsn)
+	db, err := sql.Open(string(cfg.Engine), dsn)
 	if err != nil {
 		return nil, err
 	}
@@ -25,6 +25,10 @@ func NewDirect(cfg Config) (*Direct, error) {
 		db:  db,
 		cfg: cfg,
 	}, nil
+}
+
+func (d *Direct) DiscoveredConfigs() []DiscoveredConfig {
+	return nil
 }
 
 func (d *Direct) Exec(ctx context.Context, query string, args ...interface{}) (Result, error) {

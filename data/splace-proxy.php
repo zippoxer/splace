@@ -67,7 +67,7 @@ function parse_wp_config($filename) {
     eval(implode($conf));
     return $config = [
         'Engine' => 'mysql',
-        'Host' => DB_HOST,
+        'Addr' => DB_HOST,
         'User' => DB_USER,
         'Pwd' => DB_PASSWORD,
         'Database' => DB_NAME
@@ -80,7 +80,11 @@ switch($input->Cmd) {
     case 'handshake':
         $configs = [];
         if(file_exists('./wp-config.php')) {
-            $configs[] = parse_wp_config('./wp-config.php');
+            $configs[] = [
+                'Who' => 'WordPress',
+                'Where' => realpath('./wp-config.php'),
+                'Config' => parse_wp_config('./wp-config.php')
+            ];
         }
         echo json_encode([
             'DiscoveredConfigs' => $configs

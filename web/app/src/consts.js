@@ -9,9 +9,9 @@ export const DB_DRIVERS = {
   php: 'PHP'
 }
 
-export const DB_ENGINES = [
-  'MySQL',
-  'PostgreSQL',
-  'SQL Server',
-  'Oracle'
-]
+export const DB_ENGINES = {
+  mysql: 'MySQL',
+  postgres: 'PostgreSQL',
+  sqlserver: 'SQL Server',
+  oracle: 'Oracle'
+}
