@@ -12,7 +12,9 @@ import (
 	_ "github.com/go-sql-driver/mysql"
 )
 
-var dev = flag.Bool("dev", false, "")
+var (
+	dev = flag.Bool("dev", false, "")
+)
 
 func main() {
 	flag.Parse()
