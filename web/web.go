@@ -44,13 +44,9 @@ type Server struct {
 }
 
 func New(opt Options) *Server {
-	secret, err := uuid.NewV4()
-	if err != nil {
-		panic("can't generated uuid: " + err.Error())
-	}
 	return &Server{
 		opt:    opt,
-		secret: secret.String(),
+		secret: uuid.NewV4().String(),
 	}
 }
 
